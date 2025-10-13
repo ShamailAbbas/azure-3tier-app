@@ -30,8 +30,8 @@ resource "azurerm_virtual_network" "vnet" {
   address_space       = ["10.0.0.0/16"]
 }
 
-resource "azurerm_subnet" "alb" {
-  name                 = "alb-subnet"
+resource "azurerm_subnet" "appgw" {
+  name                 = "appgw-subnet"
   resource_group_name  = azurerm_resource_group.rg.name
   virtual_network_name = azurerm_virtual_network.vnet.name
   address_prefixes     = ["10.0.1.0/24"]
@@ -86,21 +86,20 @@ resource "azurerm_private_dns_zone_virtual_network_link" "mysql_vnet_link" {
 ############################################################
 # Network Security Groups
 ############################################################
-# NSG for Backend
 resource "azurerm_network_security_group" "backend_nsg" {
   name                = "backend-nsg"
   location            = azurerm_resource_group.rg.location
   resource_group_name = azurerm_resource_group.rg.name
 
   security_rule {
-    name                       = "Allow-HTTP-from-LB"
+    name                       = "Allow-AppGateway"
     priority                   = 100
     direction                  = "Inbound"
     access                     = "Allow"
     protocol                   = "Tcp"
     source_port_range          = "*"
     destination_port_range     = "3000"
-    source_address_prefix      = "Internet"
+    source_address_prefix      = "10.0.1.0/24"
     destination_address_prefix = "*"
   }
 
@@ -184,60 +183,100 @@ resource "azurerm_mysql_flexible_database" "mydb" {
 }
 
 ############################################################
-# Standard Load Balancer for Backend VMSS
+# Application Gateway (WAF_v2)
 ############################################################
-resource "azurerm_public_ip" "lb_pip" {
-  name                = "backend-lb-pip"
+resource "azurerm_public_ip" "appgw_pip" {
+  name                = "appgw-public-ip"
   location            = azurerm_resource_group.rg.location
   resource_group_name = azurerm_resource_group.rg.name
   allocation_method   = "Static"
   sku                 = "Standard"
 }
 
-resource "azurerm_lb" "backend_lb" {
-  name                = "backend-lb"
+resource "azurerm_application_gateway" "appgw" {
+  name                = "my3tier-appgateway"
   location            = azurerm_resource_group.rg.location
   resource_group_name = azurerm_resource_group.rg.name
-  sku                 = "Standard"
-  frontend_ip_configuration {
-    name                 = "public-lb-frontend"
-    public_ip_address_id = azurerm_public_ip.lb_pip.id
+
+  sku {
+    name     = "WAF_v2"
+    tier     = "WAF_v2"
+    capacity = 2
   }
-}
 
-# Backend Pool pointing to VMSS
-resource "azurerm_lb_backend_address_pool" "backend_pool" {
-  name            = "backend-pool"
-  loadbalancer_id = azurerm_lb.backend_lb.id
-}
+  gateway_ip_configuration {
+    name      = "appgw-ip-config"
+    subnet_id = azurerm_subnet.appgw.id
+  }
 
-# LB Health Probe
-resource "azurerm_lb_probe" "backend_probe" {
-  name                = "backend-http-probe"
-  loadbalancer_id     = azurerm_lb.backend_lb.id
-  protocol            = "Tcp"
-  port                = 3000
-  interval_in_seconds = 15
-  number_of_probes    = 3
-}
+  frontend_ip_configuration {
+    name                 = "appgw-frontend-ip"
+    public_ip_address_id = azurerm_public_ip.appgw_pip.id
+  }
 
-# LB Rule
-resource "azurerm_lb_rule" "backend_rule" {
-  name                           = "http-rule"
-  loadbalancer_id                = azurerm_lb.backend_lb.id
-  protocol                       = "Tcp"
-  frontend_port                  = 3000
-  backend_port                   = 3000
-  frontend_ip_configuration_name = "public-lb-frontend"
-  backend_address_pool_ids       = [azurerm_lb_backend_address_pool.backend_pool.id]
-  probe_id                       = azurerm_lb_probe.backend_probe.id
+  frontend_port {
+    name = "frontend-port"
+    port = 80
+  }
+
+  backend_address_pool {
+    name = "backend-pool"
+  }
+
+  backend_http_settings {
+    name                  = "backend-http-settings"
+    cookie_based_affinity = "Disabled"
+    port                  = 3000
+    protocol              = "Http"
+    request_timeout       = 30
+  }
+
+  probe {
+    name                = "backend-probe"
+    protocol            = "Http"
+    path                = "/"
+    interval            = 15
+    timeout             = 10
+    unhealthy_threshold = 3
+  }
+
+  http_listener {
+    name                           = "http-listener"
+    frontend_ip_configuration_name = "appgw-frontend-ip"
+    frontend_port_name             = "frontend-port"
+    protocol                       = "Http"
+  }
+
+  request_routing_rule {
+    name                       = "http-rule"
+    rule_type                  = "Basic"
+    http_listener_name         = "http-listener"
+    backend_address_pool_name  = "backend-pool"
+    backend_http_settings_name = "backend-http-settings"
+    priority                   = 100
+  }
+
+  waf_configuration {
+    enabled          = true
+    firewall_mode    = "Detection"
+    rule_set_type    = "OWASP"
+    rule_set_version = "3.2"
+  }
+
+  tags = {
+    environment = "production"
+  }
+
+  depends_on = [azurerm_public_ip.appgw_pip]
 }
 
 ##################################################
 # KEY VAULT
 ##################################################
+data "azurerm_client_config" "current" {}
+
 resource "azurerm_key_vault" "kv" {
-  name                       = "mydemokeyvault123"
+  name                       = "my-app-key-vault"
   location                   = azurerm_resource_group.rg.location
   resource_group_name        = azurerm_resource_group.rg.name
   sku_name                   = "standard"
@@ -245,8 +284,6 @@ resource "azurerm_key_vault" "kv" {
   purge_protection_enabled   = true
   soft_delete_retention_days = 7
 }
-
-data "azurerm_client_config" "current" {}
 
 ##################################################
 # STORE JSON SECRET
@@ -286,7 +323,7 @@ resource "azurerm_key_vault_access_policy" "vmss_policy" {
   object_id    = azurerm_user_assigned_identity.vmss_identity.principal_id
 
   secret_permissions = [
-    "get", "list"
+    "Get", "List"
   ]
 }
 
@@ -302,12 +339,14 @@ resource "azurerm_linux_virtual_machine_scale_set" "backend_vmss" {
   admin_username                  = "azureuser"
   disable_password_authentication = true
   overprovision                   = true
+
   identity {
     type = "UserAssigned"
     identity_ids = [
       azurerm_user_assigned_identity.vmss_identity.id
     ]
   }
+
   admin_ssh_key {
     username   = "azureuser"
     public_key = tls_private_key.vm_key.public_key_openssh
@@ -324,10 +363,10 @@ resource "azurerm_linux_virtual_machine_scale_set" "backend_vmss" {
     primary = true
 
     ip_configuration {
-      name                                   = "backend-ipconfig"
-      subnet_id                              = azurerm_subnet.backend.id
-      primary                                = true
-      load_balancer_backend_address_pool_ids = [azurerm_lb_backend_address_pool.backend_pool.id]
+      name                                         = "backend-ipconfig"
+      subnet_id                                    = azurerm_subnet.backend.id
+      primary                                      = true
+      application_gateway_backend_address_pool_ids = [azurerm_application_gateway.appgw.backend_address_pool[0].id]
     }
   }
 
@@ -341,55 +380,106 @@ resource "azurerm_linux_virtual_machine_scale_set" "backend_vmss" {
   custom_data = base64encode(<<-EOF
 #!/bin/bash
 set -e
-
-# Update system
 apt-get update -y
 apt-get install -y curl git build-essential mysql-client
-
-# Install Node.js 20.x
 curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
 apt-get install -y nodejs
-
-# Install PM2 globally
 npm install -g pm2
-
-# Create app directory
 mkdir -p /home/azureuser/azure-3tier-app
 cd /home/azureuser/azure-3tier-app
-
-# Clone the backend repository
 git clone https://github.com/ShamailAbbas/azure-3tier-app .
-
-# Set proper ownership
 chown -R azureuser:azureuser /home/azureuser/azure-3tier-app
-
 cd /home/azureuser/azure-3tier-app/backend
-
-# Create .env file with DB credentials or secret info
 cat > .env <<'ENVEOF'
 KEY_VAULT_NAME=${azurerm_key_vault.kv.name}
 SECRET_NAME=${azurerm_key_vault_secret.app_secret.name}
 ENVEOF
-
-# Install dependencies
 npm install
-
-# Start with PM2 as azureuser
 su - azureuser -c "cd /home/azureuser/azure-3tier-app/backend && pm2 start index.js --name myapp"
-
-# Setup PM2 to start on boot
 su - azureuser -c "pm2 startup systemd -u azureuser --hp /home/azureuser" | grep -v "You have to run this command as root" | bash
 su - azureuser -c "pm2 save"
-
 echo "Backend setup complete!"
 EOF
   )
 
-
   upgrade_mode = "Automatic"
-
-  depends_on = [azurerm_lb_backend_address_pool.backend_pool, azurerm_key_vault.kv]
+  depends_on   = [azurerm_application_gateway.appgw, azurerm_key_vault.kv]
 }
+
+
+############################################################
+# Autoscale based on 70% CPU utilization
+############################################################
+resource "azurerm_monitor_autoscale_setting" "backend_autoscale" {
+  name                = "backend-autoscale"
+  resource_group_name = azurerm_resource_group.rg.name
+  location            = azurerm_resource_group.rg.location
+  target_resource_id  = azurerm_linux_virtual_machine_scale_set.backend_vmss.id
+  enabled             = true
+
+  profile {
+    name = "default-autoscale-profile"
+
+    capacity {
+      minimum = "2"
+      maximum = "5"
+      default = "2"
+    }
+
+    # Scale out rule: if average CPU > 70% for 5 minutes, add 1 instance
+    rule {
+      metric_trigger {
+        metric_name        = "Percentage CPU"
+        metric_resource_id = azurerm_linux_virtual_machine_scale_set.backend_vmss.id
+        time_grain         = "PT1M"
+        statistic          = "Average"
+        time_window        = "PT5M"
+        time_aggregation   = "Average"
+        operator           = "GreaterThan"
+        threshold          = 70
+      }
+
+      scale_action {
+        direction = "Increase"
+        type      = "ChangeCount"
+        value     = "1"
+        cooldown  = "PT5M"
+      }
+    }
+
+    # Scale in rule: if average CPU < 30% for 10 minutes, remove 1 instance
+    rule {
+      metric_trigger {
+        metric_name        = "Percentage CPU"
+        metric_resource_id = azurerm_linux_virtual_machine_scale_set.backend_vmss.id
+        time_grain         = "PT1M"
+        statistic          = "Average"
+        time_window        = "PT10M"
+        time_aggregation   = "Average"
+        operator           = "LessThan"
+        threshold          = 30
+      }
+
+      scale_action {
+        direction = "Decrease"
+        type      = "ChangeCount"
+        value     = "1"
+        cooldown  = "PT10M"
+      }
+    }
+  }
+
+  # Optional notification (if you want email or webhook alerts)
+  # notification {
+  #   email {
+  #     send_to_subscription_administrator = true
+  #     custom_emails = ["admin@example.com"]
+  #   }
+  # }
+
+  depends_on = [azurerm_linux_virtual_machine_scale_set.backend_vmss]
+}
+
 
 ############################################################
 # Azure Bastion
@@ -417,17 +507,11 @@ resource "azurerm_bastion_host" "bastion" {
 ############################################################
 # Outputs
 ############################################################
-output "backend_lb_public_ip" {
-  value       = azurerm_public_ip.lb_pip.ip_address
-  description = "Public IP of backend Load Balancer"
+output "app_gateway_public_ip" {
+  value       = azurerm_public_ip.appgw_pip.ip_address
+  description = "Public IP of Azure Application Gateway"
 }
 
-output "mysql_fqdn" {
-  value       = azurerm_mysql_flexible_server.db.fqdn
-  description = "MySQL FQDN (private access only)"
-}
 
-output "bastion_instructions" {
-  value       = "Use Azure Bastion in the portal to SSH into the backend VMSS instances. Navigate to the VMSS in portal and click 'Connect' -> 'Bastion'"
-  description = "How to access backend VMSS securely"
-}
+
+

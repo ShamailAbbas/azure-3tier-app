@@ -16,42 +16,7 @@ As a **DevOps Engineer**, the goal of this setup is to:
 
 ## 🏗️ Architecture Diagram
 
-```
-                        ┌─────────────────────────────┐
-                        │         Internet            │
-                        └────────────┬────────────────┘
-                                     │
-                          Public IP + Load Balancer
-                                     │
-                      ┌──────────────┴───────────────┐
-                      │                              │
-             Backend VM Scale Set (Node.js API)      │
-               - 2 Instances (Auto Scaling Ready)     │
-               - Managed Identity (Access Key Vault)  │
-                      │                              │
-                      ▼                              ▼
-              ┌──────────────────────────────────────────┐
-              │          Azure Virtual Network           │
-              │  Subnets:                                │
-              │   • alb-subnet (Load Balancer)           │
-              │   • backend-subnet (VMSS)                │
-              │   • db-subnet (MySQL, delegated)         │
-              │   • AzureBastionSubnet (SSH Access)      │
-              └──────────────────────────────────────────┘
-                      │
-                      ▼
-            Azure MySQL Flexible Server (Private Endpoint)
-                      │
-                      ▼
-           Azure Private DNS Zone (privatelink.mysql.database.azure.com)
-                      │
-                      ▼
-              Azure Key Vault (Secrets stored as JSON)
-                      │
-                      ▼
-        Backend retrieves DB credentials securely via Managed Identity
-
-```
+![Architecture Diagram](image.png)
 
 ---
 
@@ -122,16 +87,26 @@ my3tierapp-rg-multi-vm (Location: UK South)
   - Sets up `.env` file pointing to Azure Key Vault
   - Starts backend service with PM2 and enables auto-start on reboot
 
+**Autoscale based on 70% CPU utilization:**
+
+| Purpose                      | Detail                                                       |
+| ---------------------------- | ------------------------------------------------------------ |
+| **Minimum = 2, Maximum = 5** | VMSS will always have at least 2 VMs and can scale up to 5   |
+| **Scale out at 70% CPU**     | If average CPU > 70% for 5 minutes → add 1 VM                |
+| **Scale in at 30% CPU**      | If CPU < 30% for 10 minutes → remove 1 VM                    |
+| **Cooldown**                 | Prevents rapid scaling up/down by enforcing a waiting period |
+| **Metric Source**            | Uses the built-in `Percentage CPU` metric from Azure Monitor |
+
 ---
 
 ### **5. Load Balancer**
 
-- **Azure Standard Load Balancer**
+- **Azure Application Gateway**
 
   - Public frontend IP for app access
   - Health probe on port `3000`
   - Backend pool connected to VMSS
-  - Rule to forward `TCP/3000` traffic to backend instances
+  - Rule to forward `TCP/80` traffic to backend instances
 
 ---
 
