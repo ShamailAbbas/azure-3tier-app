@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3-Tier Application</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+        .container {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            padding: 40px;
+            max-width: 600px;
+            width: 100%;
+        }
+        h1 {
+            color: #667eea;
+            margin-bottom: 10px;
+            font-size: 2em;
+        }
+        .subtitle {
+            color: #666;
+            margin-bottom: 30px;
+            font-size: 0.9em;
+        }
+        .form-group {
+            margin-bottom: 20px;
+        }
+        input[type="text"] {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 16px;
+            transition: border 0.3s;
+        }
+        input[type="text"]:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+        button {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 12px 30px;
+            border-radius: 8px;
+            font-size: 16px;
+            cursor: pointer;
+            transition: transform 0.2s;
+            width: 100%;
+        }
+        button:hover {
+            transform: translateY(-2px);
+        }
+        .items-list {
+            margin-top: 30px;
+        }
+        .item {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 10px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            transition: transform 0.2s;
+        }
+        .item:hover {
+            transform: translateX(5px);
+        }
+        .item-content {
+            flex: 1;
+        }
+        .item-name {
+            font-weight: bold;
+            color: #333;
+            margin-bottom: 5px;
+        }
+        .item-desc {
+            color: #666;
+            font-size: 0.9em;
+        }
+        .delete-btn {
+            background: #ff6b6b;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            width: auto;
+        }
+        .delete-btn:hover {
+            background: #ff5252;
+        }
+        .empty-state {
+            text-align: center;
+            color: #999;
+            padding: 40px;
+            font-style: italic;
+        }
+        .status {
+            padding: 10px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+        .status.success {
+            background: #d4edda;
+            color: #155724;
+        }
+        .status.error {
+            background: #f8d7da;
+            color: #721c24;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🚀 3-Tier Application</h1>
+        <p class="subtitle">Azure Infrastructure Demo</p>
+
+        <div id="status" class="status" style="display: none;"></div>
+
+        <form id="createForm">
+            <div class="form-group">
+                <input type="text" id="name" placeholder="Item Name" required>
+            </div>
+            <div class="form-group">
+                <input type="text" id="description" placeholder="Item Description" required>
+            </div>
+            <button type="submit">Add Item</button>
+        </form>
+
+        <div class="items-list">
+            <h2 style="margin-bottom: 15px; color: #333;">Items</h2>
+            <div id="items"></div>
+        </div>
+    </div>
+
+    <script>
+        const BACKEND_URL = 'http://20.162.206.134:3000/api/items';
+
+        function showStatus(message, isError) {
+            const status = document.getElementById('status');
+            status.textContent = message;
+            status.className = 'status ' + (isError ? 'error' : 'success');
+            status.style.display = 'block';
+            setTimeout(function() {
+                status.style.display = 'none';
+            }, 3000);
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        async function fetchItems() {
+            try {
+                const response = await fetch(BACKEND_URL);
+                if (!response.ok) throw new Error('Failed to fetch items');
+                const data = await response.json();
+
+                const container = document.getElementById('items');
+
+                if (data.length === 0) {
+                    container.innerHTML = '<div class="empty-state">No items yet. Add your first item above!</div>';
+                    return;
+                }
+
+                let html = '';
+                for (let i = 0; i < data.length; i++) {
+                    const item = data[i];
+                    html += '<div class="item">';
+                    html += '<div class="item-content">';
+                    html += '<div class="item-name">' + escapeHtml(item.name) + '</div>';
+                    html += '<div class="item-desc">' + escapeHtml(item.description) + '</div>';
+                    html += '</div>';
+                    html += '<button class="delete-btn" onclick="deleteItem(' + item.id + ')">Delete</button>';
+                    html += '</div>';
+                }
+                container.innerHTML = html;
+            } catch (error) {
+                console.error('Error fetching items:', error);
+                showStatus('Failed to load items', true);
+            }
+        }
+
+        async function deleteItem(id) {
+            try {
+                const response = await fetch(BACKEND_URL + '/' + id, {
+                    method: 'DELETE'
+                });
+                if (!response.ok) throw new Error('Delete failed');
+                showStatus('Item deleted successfully', false);
+                fetchItems();
+            } catch (error) {
+                console.error('Error deleting item:', error);
+                showStatus('Failed to delete item', true);
+            }
+        }
+
+        document.getElementById('createForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+
+            const name = document.getElementById('name').value;
+            const description = document.getElementById('description').value;
+
+            try {
+                const response = await fetch(BACKEND_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name: name, description: description })
+                });
+
+                if (!response.ok) throw new Error('Create failed');
+
+                showStatus('Item added successfully', false);
+                e.target.reset();
+                fetchItems();
+            } catch (error) {
+                console.error('Error creating item:', error);
+                showStatus('Failed to add item', true);
+            }
+        });
+
+        // Initial load
+        fetchItems();
+    </script>
+</body>
+</html>
