@@ -3,117 +3,93 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>3-Tier Application</title>
+    <title>Social Feed</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            background: #f0f2f5;
             min-height: 100vh;
-            display: flex;
-            justify-content: center;
-            align-items: center;
             padding: 20px;
         }
         .container {
+            max-width: 680px;
+            margin: 0 auto;
+        }
+        .header {
             background: white;
-            border-radius: 20px;
-            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
-            padding: 40px;
-            max-width: 600px;
-            width: 100%;
+            border-radius: 12px;
+            padding: 30px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
         }
-        h1 {
-            color: #667eea;
-            margin-bottom: 10px;
-            font-size: 2em;
+        .header h1 {
+            color: #1877f2;
+            font-size: 28px;
+            margin-bottom: 5px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
         }
-        .subtitle {
-            color: #666;
-            margin-bottom: 30px;
-            font-size: 0.9em;
+        .header .subtitle {
+            color: #65676b;
+            font-size: 14px;
+        }
+        .create-post {
+            background: white;
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .create-post-header {
+            font-weight: 600;
+            color: #050505;
+            margin-bottom: 15px;
+            font-size: 16px;
         }
         .form-group {
-            margin-bottom: 20px;
+            margin-bottom: 12px;
         }
         input[type="text"] {
             width: 100%;
-            padding: 12px;
-            border: 2px solid #e0e0e0;
+            padding: 14px 16px;
+            border: 1px solid #dddfe2;
             border-radius: 8px;
-            font-size: 16px;
-            transition: border 0.3s;
+            font-size: 15px;
+            background: #f0f2f5;
+            transition: background 0.2s;
         }
         input[type="text"]:focus {
             outline: none;
-            border-color: #667eea;
+            background: white;
+            border-color: #1877f2;
         }
-        button {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        input[type="text"]::placeholder {
+            color: #8a8d91;
+        }
+        button[type="submit"] {
+            background: #1877f2;
             color: white;
             border: none;
-            padding: 12px 30px;
+            padding: 12px;
             border-radius: 8px;
-            font-size: 16px;
+            font-size: 15px;
+            font-weight: 600;
             cursor: pointer;
-            transition: transform 0.2s;
+            transition: background 0.2s;
             width: 100%;
+            margin-top: 8px;
         }
-        button:hover {
-            transform: translateY(-2px);
-        }
-        .items-list {
-            margin-top: 30px;
-        }
-        .item {
-            background: #f8f9fa;
-            padding: 15px;
-            border-radius: 8px;
-            margin-bottom: 10px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            transition: transform 0.2s;
-        }
-        .item:hover {
-            transform: translateX(5px);
-        }
-        .item-content {
-            flex: 1;
-        }
-        .item-name {
-            font-weight: bold;
-            color: #333;
-            margin-bottom: 5px;
-        }
-        .item-desc {
-            color: #666;
-            font-size: 0.9em;
-        }
-        .delete-btn {
-            background: #ff6b6b;
-            color: white;
-            border: none;
-            padding: 8px 16px;
-            border-radius: 6px;
-            cursor: pointer;
-            font-size: 14px;
-            width: auto;
-        }
-        .delete-btn:hover {
-            background: #ff5252;
-        }
-        .empty-state {
-            text-align: center;
-            color: #999;
-            padding: 40px;
-            font-style: italic;
+        button[type="submit"]:hover {
+            background: #166fe5;
         }
         .status {
-            padding: 10px;
+            padding: 12px 16px;
             border-radius: 8px;
-            margin-bottom: 20px;
+            margin-bottom: 15px;
             text-align: center;
+            font-size: 14px;
         }
         .status.success {
             background: #d4edda;
@@ -123,29 +99,120 @@
             background: #f8d7da;
             color: #721c24;
         }
+        .feed-header {
+            font-weight: 600;
+            color: #050505;
+            margin-bottom: 15px;
+            font-size: 18px;
+        }
+        .post {
+            background: white;
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 15px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            transition: box-shadow 0.2s;
+        }
+        .post:hover {
+            box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+        }
+        .post-header {
+            display: flex;
+            align-items: center;
+            margin-bottom: 12px;
+            gap: 12px;
+        }
+        .avatar {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: 600;
+            font-size: 16px;
+            flex-shrink: 0;
+        }
+        .post-author {
+            flex: 1;
+        }
+        .author-name {
+            font-weight: 600;
+            color: #050505;
+            font-size: 15px;
+        }
+        .post-time {
+            color: #65676b;
+            font-size: 13px;
+        }
+        .post-content {
+            color: #050505;
+            font-size: 15px;
+            line-height: 1.5;
+            margin-bottom: 12px;
+        }
+        .post-footer {
+            display: flex;
+            justify-content: flex-end;
+            padding-top: 12px;
+            border-top: 1px solid #e4e6eb;
+        }
+        .delete-btn {
+            background: transparent;
+            color: #65676b;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+            transition: background 0.2s;
+            width: auto;
+        }
+        .delete-btn:hover {
+            background: #f0f2f5;
+            color: #e4405f;
+        }
+        .empty-state {
+            text-align: center;
+            color: #65676b;
+            padding: 60px 20px;
+            background: white;
+            border-radius: 12px;
+            font-size: 15px;
+        }
+        .empty-state-icon {
+            font-size: 48px;
+            margin-bottom: 12px;
+        }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>🚀 3-Tier Application</h1>
-        <p class="subtitle">Azure Infrastructure Demo</p>
-
-        <div id="status" class="status" style="display: none;"></div>
-
-        <form id="createForm">
-            <div class="form-group">
-                <input type="text" id="name" placeholder="Item Name" required>
-            </div>
-            <div class="form-group">
-                <input type="text" id="description" placeholder="Item Description" required>
-            </div>
-            <button type="submit">Add Item</button>
-        </form>
-
-        <div class="items-list">
-            <h2 style="margin-bottom: 15px; color: #333;">Items</h2>
-            <div id="items"></div>
+        <div class="header">
+            <h1>📱 Social Feed</h1>
+            <p class="subtitle">Share your thoughts with the world</p>
         </div>
+
+        <div class="create-post">
+            <div class="create-post-header">Create Post</div>
+            <div id="status" class="status" style="display: none;"></div>
+
+            <form id="createForm">
+                <div class="form-group">
+                    <input type="text" id="name" placeholder="Your name" required>
+                </div>
+                <div class="form-group">
+                    <input type="text" id="description" placeholder="What's on your mind?" required>
+                </div>
+                <button type="submit">Post</button>
+            </form>
+        </div>
+
+        <div class="feed-header">Recent Posts</div>
+        <div id="items"></div>
     </div>
 
     <script>
@@ -167,6 +234,21 @@
             return div.innerHTML;
         }
 
+        function getInitials(name) {
+            return name.split(' ').map(function(n) { return n[0]; }).join('').toUpperCase().substring(0, 2);
+        }
+
+        function getTimeAgo(date) {
+            const now = new Date();
+            const postDate = new Date(date);
+            const seconds = Math.floor((now - postDate) / 1000);
+
+            if (seconds < 60) return 'Just now';
+            if (seconds < 3600) return Math.floor(seconds / 60) + 'm ago';
+            if (seconds < 86400) return Math.floor(seconds / 3600) + 'h ago';
+            return Math.floor(seconds / 86400) + 'd ago';
+        }
+
         async function fetchItems() {
             try {
                 const response = await fetch(BACKEND_URL);
@@ -176,25 +258,31 @@
                 const container = document.getElementById('items');
 
                 if (data.length === 0) {
-                    container.innerHTML = '<div class="empty-state">No items yet. Add your first item above!</div>';
+                    container.innerHTML = '<div class="empty-state"><div class="empty-state-icon">📝</div><div>No posts yet. Be the first to share!</div></div>';
                     return;
                 }
 
                 let html = '';
                 for (let i = 0; i < data.length; i++) {
                     const item = data[i];
-                    html += '<div class="item">';
-                    html += '<div class="item-content">';
-                    html += '<div class="item-name">' + escapeHtml(item.name) + '</div>';
-                    html += '<div class="item-desc">' + escapeHtml(item.description) + '</div>';
+                    html += '<div class="post">';
+                    html += '<div class="post-header">';
+                    html += '<div class="avatar">' + getInitials(item.name) + '</div>';
+                    html += '<div class="post-author">';
+                    html += '<div class="author-name">' + escapeHtml(item.name) + '</div>';
+                    html += '<div class="post-time">' + getTimeAgo(item.created_at) + '</div>';
                     html += '</div>';
+                    html += '</div>';
+                    html += '<div class="post-content">' + escapeHtml(item.description) + '</div>';
+                    html += '<div class="post-footer">';
                     html += '<button class="delete-btn" onclick="deleteItem(' + item.id + ')">Delete</button>';
+                    html += '</div>';
                     html += '</div>';
                 }
                 container.innerHTML = html;
             } catch (error) {
                 console.error('Error fetching items:', error);
-                showStatus('Failed to load items', true);
+                showStatus('Failed to load posts', true);
             }
         }
 
@@ -204,11 +292,11 @@
                     method: 'DELETE'
                 });
                 if (!response.ok) throw new Error('Delete failed');
-                showStatus('Item deleted successfully', false);
+                showStatus('Post deleted successfully', false);
                 fetchItems();
             } catch (error) {
                 console.error('Error deleting item:', error);
-                showStatus('Failed to delete item', true);
+                showStatus('Failed to delete post', true);
             }
         }
 
@@ -227,16 +315,15 @@
 
                 if (!response.ok) throw new Error('Create failed');
 
-                showStatus('Item added successfully', false);
+                showStatus('Post created successfully', false);
                 e.target.reset();
                 fetchItems();
             } catch (error) {
                 console.error('Error creating item:', error);
-                showStatus('Failed to add item', true);
+                showStatus('Failed to create post', true);
             }
         });
 
-        // Initial load
         fetchItems();
     </script>
 </body>
