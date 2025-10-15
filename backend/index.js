@@ -25,7 +25,20 @@ async function getSecret() {
 
 let pool
 
-getSecret().then(() => {
+
+
+
+const app = express();
+app.use(cors());
+app.use(express.json());
+
+
+
+// Initialize database table
+async function initDB() {
+  try {
+
+    await getSecret().then(() => {
   pool = mysql.createPool({
     host: appConfig.DB_HOST,
     user: appConfig.DB_USER,
@@ -41,17 +54,6 @@ getSecret().then(() => {
     }
   });
 }).catch(console.error);
-
-
-const app = express();
-app.use(cors());
-app.use(express.json());
-
-
-
-// Initialize database table
-async function initDB() {
-  try {
     const connection = await pool.getConnection();
     await connection.query(`
       CREATE TABLE IF NOT EXISTS items (
